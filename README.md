@@ -4,7 +4,7 @@ We propose `A Real-Time High-Definition Teeth Restoration Network (HDTR-Net)` to
 in this work, which aims to improve clarity of talking face mouth and lip regions in real-time inference 
 that correspond to given arbitrary talking face videos.
 
-[[Paper](https://arxiv.org/abs/2309.07495)
+[[Paper]](https://arxiv.org/abs/2309.07495)
 
 <img src='./docs/img/HDTR-Net.png' width=880>
 
