@@ -34,11 +34,11 @@ def load_model(args):
     return Model
 
 def pixel_connet(img, landmarks):
-    # 将关键点连线
+    # General key point connection
     for i in range(60, 67):
         cv2.line(img, landmarks[i].astype(int), landmarks[i+1].astype(int), 0, 1)
         
-    # 连接首尾关键点，闭合形成多边形
+    # Conjunction successive key points, joint formation multiple variations
     cv2.line(img, landmarks[67].astype(int), landmarks[60].astype(int), 0, 1)
     return img
 
@@ -46,10 +46,10 @@ def pixel_connet(img, landmarks):
 def cutting_mouth(landmarks):
     landmarks = landmarks.astype(int)
     
-    x_jaw, y_jaw = landmarks[8]    # 下巴
-    x_nose, y_nose = landmarks[30]   # 鼻尖
-    x_left_mouth, y_left_mouth = landmarks[48]  # 左嘴角
-    x_right_mouth, y_right_mouth = landmarks[54]  # 右嘴角
+    x_jaw, y_jaw = landmarks[8]    # Lower tomoe
+    x_nose, y_nose = landmarks[30]   # nose tip
+    x_left_mouth, y_left_mouth = landmarks[48]  # left beak angle
+    x_right_mouth, y_right_mouth = landmarks[54]  # right beak angle
 
     if (y_jaw - y_nose) > (x_right_mouth - x_left_mouth):
         padlen = ((y_jaw - y_nose) - (x_right_mouth - x_left_mouth))/2
@@ -61,28 +61,6 @@ def cutting_mouth(landmarks):
         y_jaw += padlen
         
     return 	int(x_left_mouth), int(y_nose), int(x_right_mouth), int(y_jaw)
-
-
-def rotation(full_image, in_mask, in_mean_mask, image, landmarks):
-    pt1 = landmarks[48]    # left_corner
-    pt2 = landmarks[54]    # right_corner
-    
-    angle = np.arctan2(pt2[1] - pt1[1], pt2[0] - pt1[0]) * 180 / np.pi     # 计算旋转角度
-    center = ((pt1[0] + pt2[0]) // 2, (pt1[1] + pt2[1]) // 2)              # 计算中心点坐标
-    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)          # 旋转图像
-        
-    aligned_in_mask = cv2.warpAffine(in_mask, rotation_matrix, (image.shape[1], image.shape[0]))
-    aligned_in_mean_mask = cv2.warpAffine(in_mean_mask, rotation_matrix, (image.shape[1], image.shape[0]))
-    aligned_image = cv2.warpAffine(image, rotation_matrix, (image.shape[1], image.shape[0]))
-    aligned_full_image = cv2.warpAffine(full_image, rotation_matrix, (full_image.shape[1], full_image.shape[0]))
-
-    keypoints = np.array(landmarks)
-    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1)
-
-    keypoints_homogeneous = np.concatenate((keypoints, np.ones((keypoints.shape[0], 1))), axis=1)     # 将关键点坐标转换为齐次坐标
-    keypoints_rotated = np.dot(rotation_matrix, keypoints_homogeneous.T).T     # 应用旋转矩阵进行坐标变换
-    keypoints_rotated = keypoints_rotated[:, :2]                               # 提取旋转后的关键点坐标
-    return aligned_full_image, aligned_in_mask, aligned_in_mean_mask, aligned_image, keypoints_rotated, rotation_matrix
 
 def get_mask(image, landmarks):
     # cut_image = aligned_img[int(y_nose):int(y_jaw), int(x_left_mouth):int(x_right_mouth), :]
@@ -194,8 +172,7 @@ def prepare_data(full_frame_path, temp_dir):
             cv2.imwrite(join(align_crop_image_path, base_image + '_mask.png'), in_mask[y0:y1, x0:x1, :])
             cv2.imwrite(join(align_crop_image_path, base_image + '_mean_mask.png'), in_mean_mask[y0:y1, x0:x1, :])
             cv2.imwrite(join(align_crop_image_path, base_image + '_image.png'), cut_image[y0:y1, x0:x1, :])
-            h, w, _ = cut_image[y0:y1, x0:x1, :].shape
-            image_hw[i] = (h, w)
+            image_hw[i] = (y1 - y0, x1 - x0)
         image_config['image_hw'] = image_hw
         image_config['image_coor'] = image_coor
         pickle.dump(image_config, config)
@@ -214,7 +191,7 @@ def save_results(SR_images, path, index):
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_video', type=str, default='./sample/00001.mp4', help='Input video to clear mouth region')
+    parser.add_argument('--input_video', type=str, default='/data/users/yongyuanli/workspace/mydata1/ICASSP/sample/video/ABOUT_00001.mp4', help='Input video to clear mouth region')
     parser.add_argument('--temp_dir', type=str, default='./test_result', help='Temp directory to save output')
     parser.add_argument('--model_path', type=str, default='./checkpoint/lip-clarity-model.pth', 
                         help='Root path of pretrained SR model')
@@ -304,16 +281,17 @@ if __name__=="__main__":
 
         # paste bask
         h, w = image_config['image_hw'][index]
+        
         out_image = cv2.imread(join(save_path, index))
-        out_image = cv2.resize(out_image, (h, w))
+        out_image = cv2.resize(out_image, (w, h))
         
         x0, y0, x1, y1 = image_config['image_coor'][index]
         
         # create mouth mask
         mask = np.zeros(full_image.shape[:2], dtype=np.uint8)
         souce_img = full_image.copy()
-        souce_img[y0:y0+h, x0:x0+w, :] = out_image
-        mask[y0:y0+h, x0:x0+w] = 255
+        souce_img[y0:y1, x0:x1, :] = out_image
+        mask[y0:y1, x0:x1] = 255
 
         # seamless
         mixed_image = cv2.seamlessClone(souce_img, full_image, mask, (x0+w//2, y0+h//2), cv2.NORMAL_CLONE)
